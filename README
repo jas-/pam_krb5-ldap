@@ -5,17 +5,32 @@ locally, but within an LDAP directory. Supports RFC2307
 POSIX account schema attributes for uid, gid, homeDirectory,
 and defaultShell.
 
-In order to enable this functionality simply run the configure
-command with the --with-ldap argument like so.
+Installation:
+1. Pull down the latest pam_krb5 git repo like so:
+git clone git://git.fedorahosted.org/pam_krb5.git
 
+2. Pull down the latest patch to add ldap uid/gid mapping:
+git clone git@github.com:jas-/pam_krb5-ldap.git
+
+3. Apply the patch (must be in same folder, and may need
+   to rename the pam_krb5 git repo folder to pam_krb5-2.3.12+ldap)
+patch -p0 > date-pam_krb5-version.patch
+
+4. Build necessary tools for build
+./autogen
+
+5. In order to enable this functionality simply run the configure
+   command with the --with-ldap argument like so.
 ./configure --with-ldap
 
 This will enable the linking against the required ldap.h and 
 -lldap libraries and provide LDAP UID/GID mapping.
 
-In addition to enabling this feature a simple configuration is
-required within the krb5.conf appdefaults section. An example
-is listed here:
+6. Install the authentication module
+make install
+
+7. Add LDAP specific data to /etc/krb5.conf appdefaults section.
+An example is listed here:
 
 [appdefaults]
 pam = {
