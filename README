@@ -1,15 +1,17 @@
-OpenLDAP/Active Directory Functionality
+Patch to extend the pam_krb5 compile options and functionality
 
 Assists with UID/GID mapping for users that are not stored
-locally, but within an OpenLDAP or Active Directory.
+locally, but within an LDAP directory. Supports RFC2307
+POSIX account schema attributes for uid, gid, homeDirectory,
+and defaultShell.
 
 In order to enable this functionality simply run the configure
 command with the --with-ldap argument like so.
 
-%> ./configure --with-ldap
+./configure --with-ldap
 
 This will enable the linking against the required ldap.h and 
--lldap libraries.
+-lldap libraries and provide LDAP UID/GID mapping.
 
 In addition to enabling this feature a simple configuration is
 required within the krb5.conf appdefaults section. An example
@@ -26,7 +28,7 @@ pam = {
         try_first_pass = true
         ignore_root = true
 
-        schema = ad # ad | ldap to meet your requirements
+        schema = ad #ad | ldap to meet your requirements
         ldapservs = ad.domain.com ldap.domain.com
         ldapport = 389
         binddn = uid=read-only-user,ou=Users,dc=ldap,dc=domain,dc=com
@@ -48,28 +50,5 @@ pam = {
         #homedir = /home
         #defshell = /bin/bash
 }
-
-You will also need to configure pam to utilize
-the krb5+ldap authentication. An example of the
-/etc/pam.d/system-auth file is listed here.
-
-auth   	    required   	    pam_env.so 
-auth        sufficient	    pam_krb5.so
-auth	    sufficient	    pam_unix.so try_first_pass likeauth nullok 
-auth	    required        pam_deny.so
-
-account	    required	    pam_unix.so 
- 
-password    required	    pam_cracklib.so difok=2 minlen=8 dcredit=2 ocredit=2 retry=3 
-password    sufficient	    pam_krb5.so
-password    sufficient	    pam_unix.so try_first_pass use_authtok nullok sha512 shadow 
-password    required	    pam_deny.so
-
-session	    required	    pam_limits.so 
-session	    required	    pam_env.so 
-session     optional	    pam_krb5.so
-session	    required	    pam_unix.so 
-session	    required	    pam_mkhomedir.so silent skel=/etc/skel umask=0022
-session	    optional	    pam_permit.so
 
 Please report any bugs to jason.gerfen@gmail.com.
