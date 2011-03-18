@@ -1,0 +1,882 @@
+diff -Naur pam_krb5/Makefile.am pam_krb5-2.3.12+ldap/Makefile.am
+--- pam_krb5/Makefile.am	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/Makefile.am	2011-03-16 12:53:13.000000000 -0600
+@@ -1,4 +1,4 @@
+-EXTRA_DIST = pam_krb5.spec TODO README README.heimdal-pkinit README.mit-pkinit README.winbind
++EXTRA_DIST = pam_krb5.spec TODO README README.heimdal-pkinit README.mit-pkinit README.winbind README.ldap
+ 
+ CONFIGURE_DEPENDENCIES = $(top_srcdir)/pam_krb5.spec
+ 
+diff -Naur pam_krb5/README.ldap pam_krb5-2.3.12+ldap/README.ldap
+--- pam_krb5/README.ldap	1969-12-31 17:00:00.000000000 -0700
++++ pam_krb5-2.3.12+ldap/README.ldap	2011-03-16 12:53:13.000000000 -0600
+@@ -0,0 +1,75 @@
++OpenLDAP/Active Directory Functionality
++
++Assists with UID/GID mapping for users that are not stored
++locally, but within an OpenLDAP or Active Directory.
++
++In order to enable this functionality simply run the configure
++command with the --with-ldap argument like so.
++
++%> ./configure --with-ldap
++
++This will enable the linking against the required ldap.h and 
++-lldap libraries.
++
++In addition to enabling this feature a simple configuration is
++required within the krb5.conf appdefaults section. An example
++is listed here:
++
++[appdefaults]
++pam = {
++        ticket_lifetime = 1d
++        renew_lifetime = 1d
++        forwardable = true
++        proxiable = false
++        retain_after_close = false
++        minimum_uid = 2
++        try_first_pass = true
++        ignore_root = true
++
++        schema = ad # ad | ldap to meet your requirements
++        ldapservs = ad.domain.com ldap.domain.com
++        ldapport = 389
++        binddn = uid=read-only-user,ou=Users,dc=ldap,dc=domain,dc=com
++        basedn = ou=campus,dc=ad,dc=domain,dc=com
++        ldapuser = [readonly-username]
++        ldappass = [readonly-password]
++        
++        passwd = /etc/passwd
++        shadow = /etc/shadow
++
++	# If you wish to add the user to groups
++	# a comma separted list should be used
++	group = /etc/group
++	groups = audio,cdrom,cdrw,usb,plugdev,video,games
++
++        # If you define these they will
++        # over write anything obtained from
++        # ldap/active directory
++        #homedir = /home
++        #defshell = /bin/bash
++}
++
++You will also need to configure pam to utilize
++the krb5+ldap authentication. An example of the
++/etc/pam.d/system-auth file is listed here.
++
++auth   	    required   	    pam_env.so 
++auth        sufficient	    pam_krb5.so
++auth	    sufficient	    pam_unix.so try_first_pass likeauth nullok 
++auth	    required        pam_deny.so
++
++account	    required	    pam_unix.so 
++ 
++password    required	    pam_cracklib.so difok=2 minlen=8 dcredit=2 ocredit=2 retry=3 
++password    sufficient	    pam_krb5.so
++password    sufficient	    pam_unix.so try_first_pass use_authtok nullok sha512 shadow 
++password    required	    pam_deny.so
++
++session	    required	    pam_limits.so 
++session	    required	    pam_env.so 
++session     optional	    pam_krb5.so
++session	    required	    pam_unix.so 
++session	    required	    pam_mkhomedir.so silent skel=/etc/skel umask=0022
++session	    optional	    pam_permit.so
++
++Please report any bugs to jason.gerfen@gmail.com.
+diff -Naur pam_krb5/configure.ac pam_krb5-2.3.12+ldap/configure.ac
+--- pam_krb5/configure.ac	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/configure.ac	2011-03-16 12:53:13.000000000 -0600
+@@ -116,6 +116,33 @@
+ fi
+ AM_CONDITIONAL(AFS,[test "x$afs" = xyes])
+ 
++AC_ARG_WITH(ldap,
++AC_HELP_STRING(--with-ldap,[Enable OpenLDAP features for optional LDAP UID/GID mapping.]),
++            ldap=$withval,
++	    ldap=AUTO)
++if test x$with_ldap = xyes ; then
++   AC_CHECK_HEADER([ldap.h], [:], [AC_MSG_ERROR([ldap.h not found! Please install the OpenLDAP libs.])])
++   LIBS="-lldap $LIBS $KRB5_LIBS $LIBSsave"
++   AC_CHECK_FUNC(ldap_initialization,,[AC_CHECK_LIB(ldap,ldap_initialization)])
++   AC_CHECK_FUNC(ldap_simple_bind_s,,[AC_CHECK_LIB(ldap,ldap_simple_bind_s)])
++   AC_CHECK_FUNC(ldap_search_s,,[AC_CHECK_LIB(ldap,ldap_search_s)])
++   AC_CHECK_FUNC(ldap_first_entry,,[AC_CHECK_LIB(ldap,ldap_first_entry)])
++   AC_CHECK_FUNC(ldap_get_values,,[AC_CHECK_LIB(ldap,ldap_get_values)])
++   AC_CHECK_FUNC(ldap_msgfree,,[AC_CHECK_LIB(ldap,ldap_msgfree)])
++   AC_CHECK_FUNC(ldap_unbind,,[AC_CHECK_LIB(ldap,ldap_unbind)])
++   AC_DEFINE(WITH_LDAP,1,[Define if you require OpenLDAP support.])
++   WITH_LDAP="yes"
++   AC_CHECK_HEADER([pwd.h], [:], [AC_MSG_ERROR([pwd.h not found! Please install the GNU libraries.])])
++   AC_CHECK_FUNC(putpwent,,[AC_CHECK_LIB(pwd,putpwent)])
++   AC_CHECK_HEADER([shadow.h], [:], [AC_MSG_ERROR([shadow.h not found! Please install the GNU libraries.])])
++   AC_CHECK_FUNC(lckpwdf,,[AC_CHECK_LIB(shadow,lckpwdf)])
++   AC_CHECK_FUNC(ulckpwdf,,[AC_CHECK_LIB(shadow,ulckpwdf)])
++   AC_CHECK_FUNC(putspent,,[AC_CHECK_LIB(shadow,putspent)])
++   AC_CHECK_HEADER([grp.h], [:], [AC_MSG_ERROR([grp.h not found! Please install the GNU libraries.])])
++   AC_CHECK_FUNC(fgetgrent,,[AC_CHECK_LIB(grp,fgetgrent)])
++fi
++AM_CONDITIONAL(WITH_LDAP,[test "x$with_ldap" = xyes])
++
+ AC_ARG_WITH(default-chpw-prompt,
+ [AC_HELP_STRING(--with-default-chpw-prompt="gnome-screensaver",[Set the default value of the "chpw_prompt" option (no default).])],
+ 	    DEFAULT_CHPW_PROMPT="$withval",
+diff -Naur pam_krb5/src/Makefile.am pam_krb5-2.3.12+ldap/src/Makefile.am
+--- pam_krb5/src/Makefile.am	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/src/Makefile.am	2011-03-16 12:58:47.000000000 -0600
+@@ -145,3 +145,8 @@
+ else
+ libpam_krb5_la_SOURCES += noafs.c tokens.h
+ endif
++
++if WITH_LDAP
++libpam_krb5_la_SOURCES += ldap.c
++harness_LDADD += ldap.lo
++endif
+\ No newline at end of file
+diff -Naur pam_krb5/src/ldap.c pam_krb5-2.3.12+ldap/src/ldap.c
+--- pam_krb5/src/ldap.c	1969-12-31 17:00:00.000000000 -0700
++++ pam_krb5-2.3.12+ldap/src/ldap.c	2011-03-16 13:06:31.000000000 -0600
+@@ -0,0 +1,556 @@
++/*
++ * Copyright 2009-2011 Jason Gerfen jason.gerfen@gmail.com
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, and the entire permission notice in its entirety,
++ *    including the disclaimer of warranties.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. The name of the author may not be used to endorse or promote
++ *    products derived from this software without specific prior
++ *    written permission.
++ *
++ * ALTERNATIVELY, this product may be distributed under the terms of the
++ * GNU Lesser General Public License, in which case the provisions of the
++ * LGPL are required INSTEAD OF the above restrictions.
++ *
++ * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN
++ * NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
++ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
++ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
++ * ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
++ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#define _GNU_SOURCE
++
++#include "../config.h"
++
++#include <strings.h>
++#include <ldap.h>
++#include <time.h>
++#include <errno.h>
++#include <limits.h>
++#include <stdio.h>
++#include <pwd.h>
++#include <grp.h>
++#include <shadow.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <sys/file.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++
++#ifdef HAVE_SECURITY_PAM_APPL_H
++#include <security/pam_appl.h>
++#endif
++
++#ifdef HAVE_SECURITY_PAM_MODULES_H
++#include <security/pam_modules.h>
++#endif
++
++#include KRB5_H
++#ifdef USE_KRB4
++#include KRB4_DES_H
++#include KRB4_KRB_H
++#ifdef KRB4_KRB_ERR_H
++#include KRB4_KRB_ERR_H
++#endif
++#endif
++
++#ifdef HAVE_KEYUTILS_H
++#include <keyutils.h>
++#endif
++
++#include "init.h"
++#include "log.h"
++#include "shmem.h"
++#include "stash.h"
++#include "storetmp.h"
++#include "userinfo.h"
++#include "v4.h"
++#include "v5.h"
++#include "xstr.h"
++
++extern char **comma_to_list (const char *);
++static char *members = NULL;
++int _putgrent_mod(const struct group *g, char *user, FILE *stream);
++
++int
++_check_ldap_options(struct _pam_krb5_options *options)
++{
++  if (!options->schema) { return(1); }
++  if (!options->ldapservs) { return(1); }
++  if (!options->ldapport) { return(1); }
++  if (!options->binddn) { return(1); }
++  if (!options->basedn) { return(1); }
++  if (!options->ldapuser) { return(1); }
++  if (!options->ldappass) { return(1); }
++  if (!options->passwd) { return(1); }
++  if (!options->shadow) { return(1); }
++  return(0);
++}
++
++int
++_check_ldap_results(struct _pam_krb5_user_info *userinfo)
++{
++  if (userinfo->uid == -1) { return(1); }
++  if (userinfo->gid == -1) { return(1); }
++  if (!userinfo->shell) { return(1); }
++  if (!userinfo->homedir) { return(1); }
++  return(0);
++}
++
++extern
++_ldap_search(struct _pam_krb5_options *options, char *user, struct _pam_krb5_user_info *userinfo)
++{
++  LDAP *ld;
++  LDAPMessage *res, *e;
++
++  int i, rc, port;
++  char *host, *base, buffer[80], **vals;
++  const char *attrs, *luser, *pass;
++
++  if (strcmp(options->schema, "ad")) {
++    attrs = "homeDirectory";
++  } else {
++    attrs = "msSFUHomeDirectory";
++  }
++
++  host = options->ldapservs;
++  port = atoi(options->ldapport);
++  luser = options->ldapuser;
++  pass = options->ldappass;
++  base = options->basedn;
++
++  if ((ld = ldap_init(host, port)) == NULL) {
++    crit("error connecting to %s - %s", options->ldapservs, ldap_err2string(ldap_init(host, port)));
++  } else {
++    if (ldap_simple_bind_s(ld, luser, pass) == LDAP_SUCCESS) {
++
++      snprintf(buffer, sizeof(buffer), "(&(objectCategory=Person)(anr=%s))", user);
++      warn("searching '%s' for '%s'...", options->basedn, user);
++      
++      if (ldap_search_s(ld, options->basedn, LDAP_SCOPE_SUBTREE, &buffer, NULL, 0, &res) != LDAP_SUCCESS) {
++	crit( "error occured while searching for '%s'", buffer);
++      }
++
++      if(ldap_first_entry(ld, res) == NULL) {
++	crit("'%s' not found in '%s' aborting authentication", user, options->basedn);
++      }
++
++      for (e = ldap_first_entry(ld, res); e != NULL; e = ldap_next_entry(ld, e)) {
++	
++	vals = ldap_get_values(ld, e, "uidNumber");
++	for (i = 0; vals[i] != NULL; i++) {
++	  if (vals[i] != NULL ) {
++	    userinfo->uid = atoi(vals[i]);
++	  } else {
++	    userinfo->uid = -1;
++	  }
++	}
++	
++	vals = ldap_get_values(ld, e, "gidNumber");
++	for (i = 0; vals[i] != NULL; i++) {
++	  if (vals[i] != NULL) {
++	    userinfo->gid = atoi(vals[i]);
++	  } else {
++	    userinfo->gid = -1;
++	  }
++	}
++	
++	vals = ldap_get_values(ld, e, "loginShell");
++	for (i = 0; vals[i] != NULL; i++) {
++	  if (vals[i] != NULL) {
++	    if (options->defshell == NULL) {
++	      userinfo->shell = vals[i];
++	    } else {
++	      userinfo->shell = options->defshell;
++	    }
++	  } else {
++	    userinfo->shell = NULL;
++	  }
++	}
++	
++	vals = ldap_get_values(ld, e, attrs);
++	for (i = 0; vals[i] != NULL; i++) {
++	  if (vals[i] != NULL) {
++	    if (options->homedir == NULL) {
++	      snprintf(buffer, sizeof(buffer), "%s%s", vals[i], user);
++	      userinfo->homedir = xstrdup(buffer);
++	    } else {
++	      snprintf(buffer, sizeof(buffer), "%s/%s", options->homedir, user);
++	      userinfo->homedir = xstrdup(buffer);
++	    }
++	  } else {
++	    userinfo->homedir = NULL;
++	  }
++	}
++
++	ldap_value_free(vals);
++
++      }
++      
++      ldap_msgfree(res);
++      ldap_unbind(ld);
++
++      return userinfo;
++
++    } else {
++      crit("error connection to ldap: '%s'", ldap_err2string(ldap_simple_bind_s(ld, luser, pass)));
++    }
++  }
++}
++
++int 
++_check_file(const char *file, int fd)
++{
++  struct stat orig_st;
++  struct stat new_st;
++
++  if (fd == 0) {
++    if (lstat(file, &orig_st) == -1) {
++      debug("'%s' is not a valid file", file);
++      return(1);
++    }
++   
++    if (!S_ISREG(orig_st.st_mode)) {
++      debug("'%s' is a symlink, cannot proceed", file);
++      return(1);
++    }
++  }
++
++  if (fd != 0 ) {
++    if (lstat(file, &orig_st) == -1) {
++      debug("'%s' is not a valid file", file);
++      return(1);
++    }
++
++    if (fstat(fd, &new_st) == -1) {
++      debug("could not obtain info on '%s'", file);
++      return(1);
++    }
++
++    if (orig_st.st_dev != new_st.st_dev || orig_st.st_ino != new_st.st_ino) {
++      debug("'%s' was tampered with, exiting to prevent race condition", file);
++      return(1);
++    }
++
++    if (orig_st.st_nlink > 1) {
++      debug("multiple hardlinks found on '%s', exiting", file);
++      return(1);
++    }
++  }
++
++  return(0);
++}
++
++int 
++_process_user_acct(struct _pam_krb5_options *options, struct _pam_krb5_user_info *userinfo, char *user)
++{
++  struct flock fl = { F_WRLCK, SEEK_SET, 0, 0, 0 };
++  struct passwd p_entry;
++  struct spwd s_entry;
++  struct group gr;
++  struct group *g_entry, *grp;
++  int val, i, x, write, count;
++  int length=0;
++  long int curtime = time(NULL) / (60 * 60 * 24);
++  char *buffer;
++  FILE *fp, *fp1;
++
++  if (_check_file(options->passwd, 0) == 0) {
++    if ((fp = fopen(options->passwd, "a")) != NULL) {
++      if ((flock(fileno(fp), LOCK_EX)) == 0) {
++	if (_check_file(options->passwd, fileno(fp)) == 0) {
++	  if (fseek(fp, 0, SEEK_END) != -1) {
++	    p_entry.pw_name = (char *)user;
++	    p_entry.pw_passwd = (char *)"x";
++	    p_entry.pw_uid = userinfo->uid;
++	    p_entry.pw_gid = userinfo->gid;
++	    p_entry.pw_gecos = (char *)"Added by pam_krb5";
++	    p_entry.pw_dir = (char *)userinfo->homedir;
++	    p_entry.pw_shell = (char *)userinfo->shell;
++	    if (putpwent(&p_entry, fp) != -1) {
++	      flock(fileno(fp), LOCK_UN);
++	      fflush(fp);
++	      fclose(fp);
++	      val = 0;
++	    } else {
++	      debug("error writing to '%s'", options->passwd);
++	      val = 6;
++	    }
++	  } else {
++	    debug("error seeking end of file on '%s'", options->passwd);
++	    val = 5;
++	  }
++	} else {
++	  val = 4;
++	}
++      } else {
++	debug("was not able to set exclusive lock on '%s'", options->passwd);	
++	val = 3;
++      }
++    } else {
++      val = 2;
++    }
++  } else {
++    val = 1;
++  }
++
++  if (_check_file(options->shadow, 0) == 0) {
++    if ((fp = fopen(options->shadow, "a")) != NULL) {
++      if (lckpwdf() == 0 ) {
++	if (_check_file(options->shadow, fileno(fp)) == 0) {
++	  if (fseek(fp, 0, SEEK_END) != -1) {
++	    s_entry.sp_namp = (char *)user;
++	    s_entry.sp_pwdp = (char *)"*K*";
++	    s_entry.sp_lstchg = curtime;
++	    s_entry.sp_min = 0;
++	    s_entry.sp_max = 99999;
++	    s_entry.sp_warn = 7;
++	    s_entry.sp_inact = curtime - 60;
++	    s_entry.sp_expire = curtime * 60;
++	    s_entry.sp_flag = curtime;
++	    if (putspent(&s_entry, fp) != -1) {
++	      ulckpwdf();
++	      fflush(fp);
++	      fclose(fp);
++	      val = 0;
++	    } else {
++	      debug("error writing to '%s'", options->shadow);
++	      val = 6;
++	    }
++	  } else {
++	    debug("error seeking end of file on '%s'", options->shadow);
++	    val = 5;
++	  }
++	} else {
++	  val = 4;
++	}
++      } else {
++	debug("was not able to set exclusive lock on '%s'", options->shadow);	
++	val = 3;
++      }
++    } else {
++      val = 2;
++    }
++  } else {
++    val = 1;
++  }
++
++  members = options->groups_list;
++  gr.gr_name = user;
++  gr.gr_passwd = "x";
++  gr.gr_gid = userinfo->gid;
++  gr.gr_mem = comma_to_list((const char *)members);
++
++  if (options->groups_list != NULL) {
++    if (_check_file(options->groups, 0) == 0) {
++      if ((fp = fopen(options->groups, "r")) != NULL) {
++	if ((flock(fileno(fp), LOCK_EX)) == 0) {
++	  if (_check_file(options->groups, fileno(fp)) == 0) {
++	    if ((fp1 = fopen("/etc/group-", "w+")) != NULL) {
++	      if ((flock(fileno(fp1), LOCK_EX)) == 0) {
++		if (_check_file("/etc/group-", fileno(fp1)) == 0) {
++		  while ((grp = fgetgrent(fp)) != NULL) {
++		    if (in_group(grp->gr_name, gr) == 0) {
++		      _putgrent_mod(grp, user, fp1);
++		    } else {
++		      _putgrent_mod(grp, NULL, fp1);
++		    }
++		  }
++		} else {
++		  debug("error occured during checking file integrity");
++		}
++	      } else {
++		debug("error occured during file locking");
++	      }
++	    } else {
++	      debug("error occured trying to create/open temp file");
++	    }
++	  }
++	  free(grp);
++	  flock(fileno(fp1), LOCK_UN);
++	  fclose(fp1);
++	  flock(fileno(fp), LOCK_UN);
++	  fclose(fp);
++	  if (_copy_group_accounts(options) == 0) {
++	    debug("successfully added user to list of groups");
++	  } else {
++	    crit("an error occured adding user to list of groups");
++	  }
++	} else {
++	  val = 4;
++	}
++      } else {
++	debug("was not able to set exclusive lock on '%s'", options->groups);	
++	val = 3;
++      }
++    } else {
++      val = 2;
++    }
++  } else {
++    val = 1;
++  }
++  return val;
++}
++
++
++int
++in_group(const char *member, struct group gr)
++{
++  int i;
++  int x = 1;
++  for (i=0; gr.gr_mem[i] != 0; ++i) {
++    if (strcmp(member, gr.gr_mem[i]) == 0) {
++      x = 0;
++    }
++  }
++  return x;
++}
++
++int
++_copy_group_accounts(struct _pam_krb5_options *options)
++{
++  char tmp_file[80], line[1028];
++  int val = 0;
++  FILE *fp, *fp_t;
++  sprintf(tmp_file, "%s-", options->groups);
++
++  if ((fp = fopen(tmp_file, "r")) != NULL) {
++    if ((flock(fileno(fp), LOCK_EX)) == 0) {
++      if (_check_file(tmp_file, fileno(fp)) == 0) {
++	if ((fp_t = fopen(options->groups, "w")) != NULL) {
++	  if ((flock(fileno(fp_t), LOCK_EX)) == 0) {
++	    if (_check_file(options->groups, fileno(fp_t)) == 0) {
++	      while ((fgets(line, sizeof(line), fp)) != NULL) {
++		if (fputs(line, fp_t) < 0) {
++		  val = 1;
++		}
++	      }
++	      fflush(fp_t);
++	      fclose(fp_t);
++	    }
++	    fflush(fp);
++	    fclose(fp);
++	  } else {
++	    val = 1;
++	  }
++	} else {
++	  val = 1;
++	}
++      } else {
++	val = 1;
++      }
++    } else {
++      val = 1;
++    }
++  } else {
++    val = 1;
++  }
++  return val;
++}
++
++int
++_putgrent_mod(const struct group *g, char *user, FILE *stream)
++{
++  int temp_length=0;
++  int i=0;
++  char temp_double[27];
++  char *temp_holder;
++
++  if (g==NULL || stream==NULL) {
++    return 1;
++  }
++
++  temp_length=strlen(g->gr_name);
++  temp_length+=strlen(g->gr_passwd);
++
++  sprintf(temp_double, "%d", g->gr_gid);
++  temp_length+=strlen(temp_double);
++  if(user!=NULL) {
++    temp_length+=strlen(user);
++  }
++
++  for(i=0;g->gr_mem[i]!=0;++i) {
++    temp_length+=strlen(g->gr_mem[i]);
++  }
++
++  temp_length+=(10+i);
++  temp_holder = (char *)calloc(temp_length,sizeof(char));
++
++  if ( temp_holder == NULL ) {
++    return 1;
++  }
++
++  if (user==NULL) {
++    sprintf(temp_holder,"%s:%s:%d:", g->gr_name, g->gr_passwd, g->gr_gid);
++  } else {
++    sprintf(temp_holder,"%s:%s:%d:%s,", g->gr_name, g->gr_passwd, g->gr_gid, user);
++  }
++
++  for(i=0;g->gr_mem[i]!=0;++i) {
++    strcat(temp_holder,g->gr_mem[i]);
++    strcat(temp_holder,",");
++  }
++
++  temp_holder[strlen(temp_holder)-1] = '\n';
++
++  if(fputs(temp_holder,stream)!=EOF) {
++    return 0;
++  } else {
++    return 1;
++  }
++}
++
++char **comma_to_list (const char *comma)
++{
++  char *members;
++  char **array;
++  int i;
++  char *cp, *cp2;
++
++  members = xstrdup (comma);
++
++  for (cp = members, i = 0;; i++) {
++    cp2 = strchr (cp, ',');
++    if (NULL != cp2) {
++      cp = cp2 + 1;
++    } else {
++      break;
++    }
++  }
++
++  i += 2;
++
++  array = (char **) malloc (sizeof (char *) * i);
++
++  if ('\0' == *members) {
++    *array = (char *) 0;
++    return array;
++  }
++
++  for (cp = members, i = 0;; i++) {
++    array[i] = cp;
++    cp2 = strchr (cp, ',');
++    if (NULL != cp2) {
++      *cp2 = '\0';
++      cp2++;
++      cp = cp2;
++    } else {
++      array[i + 1] = (char *) 0;
++      break;
++    }
++  }
++  return array;
++}
+diff -Naur pam_krb5/src/options.c pam_krb5-2.3.12+ldap/src/options.c
+--- pam_krb5/src/options.c	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/src/options.c	2011-03-16 13:03:30.000000000 -0600
+@@ -445,6 +445,112 @@
+ 	options->renewable = option_b(argc, argv,
+ 				      ctx, options->realm,
+ 				      service, NULL, NULL, "renewable", -1);
++#ifdef WITH_LDAP
++	/* gather up our ldap data */
++	options->schema = option_s(argc, argv,
++				   ctx, options->realm, "schema",
++				   "");
++	if (strlen(options->schema) == 0) {
++		xstrfree(options->schema);
++		options->schema = NULL;
++	}
++	options->ldapservs = option_s(argc, argv,
++				      ctx, options->realm, "ldapservs",
++				      "");
++	if (strlen(options->ldapservs) == 0) {
++		xstrfree(options->ldapservs);
++		options->ldapservs = NULL;
++	}
++	options->ldapport = option_s(argc, argv,
++				     ctx, options->realm, "ldapport",
++				     "");
++	if (strlen(options->ldapport) == 0) {
++		xstrfree(options->ldapport);
++		options->ldapport = NULL;
++	}
++	options->binddn = option_s(argc, argv,
++				   ctx, options->realm, "binddn",
++				   "");
++	if (strlen(options->binddn) == 0) {
++		xstrfree(options->binddn);
++		options->binddn = NULL;
++	}
++	options->basedn = option_s(argc, argv,
++				   ctx, options->realm, "basedn",
++				   "");
++	if (strlen(options->basedn) == 0) {
++		xstrfree(options->basedn);
++		options->basedn = NULL;
++	}
++	options->ldapuser = option_s(argc, argv,
++				     ctx, options->realm, "ldapuser",
++				     "");
++	if (strlen(options->ldapuser) == 0) {
++		xstrfree(options->ldapuser);
++		options->ldapuser = NULL;
++	}
++	options->ldappass = option_s(argc, argv,
++				     ctx, options->realm, "ldappass",
++				     "");
++	if (strlen(options->ldappass) == 0) {
++		xstrfree(options->ldappass);
++		options->ldappass = NULL;
++	}
++	options->passwd = option_s(argc, argv,
++				   ctx, options->realm, "passwd",
++				   "");
++	if (strlen(options->passwd) == 0) {
++		options->passwd = NULL;
++	}
++	options->shadow = option_s(argc, argv,
++				   ctx, options->realm, "shadow",
++				   "");
++	if (strlen(options->shadow) == 0) {
++		options->shadow = NULL;
++	}
++	options->groups = option_s(argc, argv,
++				   ctx, options->realm, "groups",
++				   "");
++	if (strlen(options->groups) == 0) {
++		options->groups = NULL;
++	}
++	options->groups_list = option_s(argc, argv,
++					ctx, options->realm, "groups_list",
++					"");
++	if (strlen(options->groups_list) == 0) {
++		xstrfree(options->groups_list);
++		options->groups_list = NULL;
++	}
++	options->homedir = option_s(argc, argv,
++				    ctx, options->realm, "homedir",
++				    "");
++	if (strlen(options->homedir) == 0) {
++		xstrfree(options->homedir);
++		options->homedir = NULL;
++	}
++	options->defshell = option_s(argc, argv,
++				     ctx, options->realm, "defshell",
++				     "");
++	if (strlen(options->defshell) == 0) {
++		xstrfree(options->defshell);
++		options->defshell = NULL;
++	}
++
++	if (options->debug) {
++	  debug("schema = %s", options->schema);
++	  debug("ldap servers = %s", options->ldapservs);
++	  debug("ldap port = %s", options->ldapport);
++	  debug("binddn = %s", options->binddn);
++	  debug("basedn = %s", options->basedn);
++	  debug("ldap user = %s", options->ldapuser);
++	  debug("ldap pass = %s", options->ldappass);
++	  debug("passwd file = %s", options->passwd);
++	  debug("shadow file = %s", options->shadow);
++	  debug("groups file = %s", options->groups);
++	  debug("groups_list = %s", options->groups_list);
++	}
++#endif
++
+ 	if (options->debug) {
+ 		debug("flags:%s%s%s%s%s%s%s%s",
+ 		      options->addressless == 1 ? " addressless" : "",
+diff -Naur pam_krb5/src/options.h pam_krb5-2.3.12+ldap/src/options.h
+--- pam_krb5/src/options.h	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/src/options.h	2011-03-16 13:07:48.000000000 -0600
+@@ -92,7 +92,21 @@
+ #ifdef HAVE_KRB5_GET_INIT_CREDS_OPT_SET_PA
+ 	char **preauth_options;
+ #endif
+-
++#ifdef WITH_LDAP
++        char *schema;
++        char *ldapservs;
++        char *ldapport;
++        char *binddn;
++        char *basedn;
++        char *ldapuser;
++        char *ldappass;
++        const char *passwd;
++        const char *shadow;
++        char *homedir;
++        char *defshell;
++        char *groups;
++        char *groups_list;
++#endif
+ 	struct afs_cell {
+ 		char *cell, *principal_name;
+ 	} *afs_cells;
+diff -Naur pam_krb5/src/userinfo.c pam_krb5-2.3.12+ldap/src/userinfo.c
+--- pam_krb5/src/userinfo.c	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/src/userinfo.c	2011-03-16 13:16:10.000000000 -0600
+@@ -224,6 +224,24 @@
+ 	strncpy(local_name, name, sizeof(local_name) - 1);
+ 	local_name[sizeof(local_name) - 1] = '\0';
+ 
++#ifdef WITH_LDAP
++	if (_get_pw_nam(local_name,
++			&ret->uid, &ret->gid,
++			&ret->homedir) != 0) {
++	  if (_check_ldap_options(options) == 1 ) {
++	    crit("missing configuration options regarding LDAP/AD account lookup, checking locally...");
++	  } else {
++	    ret = _ldap_search(options, local_name, ret);
++	    if (_check_ldap_results(ret) == 0) {
++	      notice("found '%s' in '%s', proceeding to resolve to uid/gid pair...", local_name, options->schema);
++	      if (_process_user_acct(options, ret, local_name) == 0) {
++		notice("local passwordless account was created...");
++	      }
++	    }
++	  }
++	}
++#endif
++
+ 	if (options->user_check) {
+ 		/* Look up the user's UID/GID. */
+ 		if (_get_pw_nam(local_name,
+diff -Naur pam_krb5/src/userinfo.h pam_krb5-2.3.12+ldap/src/userinfo.h
+--- pam_krb5/src/userinfo.h	2011-03-17 06:41:21.000000000 -0600
++++ pam_krb5-2.3.12+ldap/src/userinfo.h	2011-03-16 13:08:19.000000000 -0600
+@@ -41,6 +41,10 @@
+ 	char *homedir;
+ 	krb5_principal principal_name;
+ 	char *unparsed_name;
++#ifdef WITH_LDAP
++        char *shell;
++        char *list;
++#endif
+ };
+ 
+ struct _pam_krb5_user_info *_pam_krb5_user_info_init(krb5_context ctx,
