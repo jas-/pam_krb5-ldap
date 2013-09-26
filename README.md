@@ -8,31 +8,31 @@ POSIX account schema attributes for uid, gid, homeDirectory,
 and defaultShell.
 
 ##Installation:
-1. Pull down the latest pam_krb5 git repo like so:
+-   Pull down the latest patch to add ldap uid/gid mapping:
 
 ```shell
-git clone git://git.fedorahosted.org/pam_krb5.git
+git clone https://github.com:jas-/pam_krb5-ldap.git
 ```
 
-2. Pull down the latest patch to add ldap uid/gid mapping:
+-   Pull down the latest pam_krb5 git repo like so:
 
 ```shell
-git clone git@github.com:jas-/pam_krb5-ldap.git
+git clone https://git.fedorahosted.org/pam_krb5.git
 ```
 
-3. Apply the patch
+-   Apply the patch
 
 ```shell
 patch -p0 > latest-pam_krb5+ldap.patch
 ```
 
-4. Build necessary tools for build
+-   Build necessary tools for build
 
 ```shell
 ./autogen
 ```
 
-5. In order to enable this functionality simply run the configure
+-   In order to enable this functionality simply run the configure
    command with the --with-ldap argument like so.
 
 ```shell
@@ -42,7 +42,7 @@ patch -p0 > latest-pam_krb5+ldap.patch
 This will enable the linking against the required ldap.h and 
 -lldap libraries and provide LDAP UID/GID mapping.
 
-6. Install the authentication module
+-   Install the authentication module
 
 ```shell
 make install
@@ -55,7 +55,29 @@ source files you may need to force the param like so.
 make CFLAGS="-DWITH_LDAP" install
 ```
 
-7. Add LDAP specific data to /etc/krb5.conf appdefaults section.
+##Configuration
+You will now need to configure the /etc/krb5.conf & the PAM service files
+to enable the pam_krb5.so authentication module.
+
+### /etc/pam_krb5.conf
+Add LDAP specific data to /etc/krb5.conf appdefaults section.
+
+####Options
+-   schema: Available options are ad or ldap (use ad for Microsoft Active Directory & ldap for OpenLDAP)
+-   ldapservs: A space separated list of Active Directory or OpenLDAP servers hostnames (FQDN)
+-   ldapport: The Active Directory or OpenLDAP port assignment (default is 389)
+-   binddn: The bind DN for the read only account
+-   basedn: The OU with which is a base for account lookups
+-   ldapuser: The username to bind with (should be a limited privilege account)
+-   ldappass: The password to bind with
+-   passwd: The passwd file (default is /etc/passwd)
+-   shadow: The shadow file (default is /etc/shadow, NO PASSWORDS GET ENTERED HERE)
+-   group: The group file (default is /etc/group)
+-   groups: A comma separated list of groups the authenticated user should be added to
+-   homedir: If defined will overwrite the entry from Active Directory/OpenLDAP
+-   defshell: If defined will overwrite the entry from Active Directory/OpenLDAP
+
+####Example
 An example is listed here:
 
 ```
@@ -94,9 +116,11 @@ pam = {
 }
 ```
 
-8. Now you will want to add the pam_krb5 module to your authentication
+### /etc/pam.d/<service-name>
+Now you will want to add the pam_krb5 module to your authentication
 stack per the service you wish to enable this authentication for.
 
+#### Example
 ```
 auth            required        pam_env.so
 auth            sufficient      pam_krb5.so
@@ -116,7 +140,7 @@ session         optional        pam_krb5.so
 session         required        pam_unix.so
 ```
 
-#Errors
+##Errors
 If you are still unable to authenticate your users you may enable the debug option like so
 
 ```
