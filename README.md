@@ -8,41 +8,44 @@ POSIX account schema attributes for uid, gid, homeDirectory,
 and defaultShell.
 
 ##Installation:
--   Pull down the latest patch to add ldap uid/gid mapping:
+
+###This patch
+Pull down the latest patch first
 
 ```shell
 git clone https://github.com:jas-/pam_krb5-ldap.git
 ```
 
--   Pull down the latest pam_krb5 git repo like so:
+###pam_krb5
+Pull down the latest pam_krb5 git repo like so:
 
 ```shell
 git clone https://git.fedorahosted.org/pam_krb5.git
 ```
 
--   Apply the patch
+###Apply the patch
+Now apply the patch
 
 ```shell
 patch -p0 > latest-pam_krb5+ldap.patch
 ```
 
--   Build necessary tools for build
+###Build
+Build necessary tools for build
 
 ```shell
 ./autogen
 ```
 
--   In order to enable this functionality simply run the configure
-   command with the --with-ldap argument like so.
+###Configure
+In order to enable this functionality simply run the configure command with the --with-ldap argument like so.
 
 ```shell
 ./configure --with-ldap
 ```
 
-This will enable the linking against the required ldap.h and 
--lldap libraries and provide LDAP UID/GID mapping.
-
--   Install the authentication module
+###Install
+Install the authentication module
 
 ```shell
 make install
@@ -63,19 +66,19 @@ to enable the pam_krb5.so authentication module.
 Add LDAP specific data to /etc/krb5.conf appdefaults section.
 
 ####Options
--   schema: Available options are ad or ldap (use ad for Microsoft Active Directory & ldap for OpenLDAP)
--   ldapservs: A space separated list of Active Directory or OpenLDAP servers hostnames (FQDN)
--   ldapport: The Active Directory or OpenLDAP port assignment (default is 389)
--   binddn: The bind DN for the read only account
--   basedn: The OU with which is a base for account lookups
--   ldapuser: The username to bind with (should be a limited privilege account)
--   ldappass: The password to bind with
--   passwd: The passwd file (default is /etc/passwd)
--   shadow: The shadow file (default is /etc/shadow, NO PASSWORDS GET ENTERED HERE)
--   group: The group file (default is /etc/group)
--   groups: A comma separated list of groups the authenticated user should be added to
--   homedir: If defined will overwrite the entry from Active Directory/OpenLDAP
--   defshell: If defined will overwrite the entry from Active Directory/OpenLDAP
+- schema: Available options are ad or ldap (use ad for Microsoft Active Directory & ldap for OpenLDAP)
+- ldapservs: A space separated list of Active Directory or OpenLDAP servers hostnames (FQDN)
+- ldapport: The Active Directory or OpenLDAP port assignment (default is 389)
+- binddn: The bind DN for the read only account
+- basedn: The OU with which is a base for account lookups
+- ldapuser: The username to bind with (should be a limited privilege account)
+- ldappass: The password to bind with
+- passwd: The passwd file (default is /etc/passwd)
+- shadow: The shadow file (default is /etc/shadow, NO PASSWORDS GET ENTERED HERE)
+- group: The group file (default is /etc/group)
+- groups: A comma separated list of groups the authenticated user should be added to
+- homedir: If defined will overwrite the entry from Active Directory/OpenLDAP
+- defshell: If defined will overwrite the entry from Active Directory/OpenLDAP
 
 ####Example
 An example is listed here:
